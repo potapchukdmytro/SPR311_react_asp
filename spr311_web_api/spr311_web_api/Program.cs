@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Quartz;
 using Serilog;
 using spr311_web_api.BLL;
 using spr311_web_api.BLL.Configuration;
@@ -24,8 +25,9 @@ using spr311_web_api.DAL.Intializer;
 using spr311_web_api.DAL.Repositories.Auth;
 using spr311_web_api.DAL.Repositories.Category;
 using spr311_web_api.DAL.Repositories.Product;
+using spr311_web_api.Infrastructure;
+using spr311_web_api.Jobs;
 using spr311_web_api.Middlewares;
-using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -89,29 +91,18 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 });
 
 // add jwt
-string secretKey = builder.Configuration["JwtSettings:SecretKey"]
-    ?? throw new ArgumentNullException("jwt secret key is null");
+builder.Services.AddJwt(builder.Configuration);
 
-builder.Services.AddAuthentication(options =>
+// Add quartz
+var jobs = new (Type type, string cron)[]
 {
-    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateAudience = true,
-            ValidateIssuer = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            RequireExpirationTime = true,
-            ClockSkew = TimeSpan.Zero,
-            ValidAudience = builder.Configuration["JwtSettings:Audience"],
-            ValidIssuer = builder.Configuration["JwtSettings:Issuer"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
-        };
-    });
+    (typeof(ConsoleJob), "0 0 * * * ?"),
+    (typeof(LogsCleanJob), "0 * * * * ?"),
+    //(typeof(BotNotificationJob), "0/15 * * * * ?")
+};
+
+builder.Services.AddJobs(jobs);
+builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 
 // Logging
 Log.Logger = new LoggerConfiguration()
@@ -187,12 +178,12 @@ string imagesPath = Path.Combine(wwwroot, "images");
 Settings.ImagesPath = imagesPath;
 Settings.RootPath = wwwroot;
 
-if(!Directory.Exists(wwwroot))
+if (!Directory.Exists(wwwroot))
 {
     Directory.CreateDirectory(wwwroot);
 }
 
-if(!Directory.Exists(imagesPath))
+if (!Directory.Exists(imagesPath))
 {
     Directory.CreateDirectory(imagesPath);
 }
