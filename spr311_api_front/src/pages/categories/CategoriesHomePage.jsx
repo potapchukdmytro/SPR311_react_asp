@@ -22,6 +22,7 @@ const CategoriesHomePage = () => {
 
     return (
         <Box sx={{mt: 5, display: 'flex', justifyContent: 'center'}}>
+            <h1>Categories</h1>
             <Grid container spacing={2} sx={{backgroundColor: 'gray', p: 2}}>
                 {
                     categories.map((category) => (
